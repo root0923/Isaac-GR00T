@@ -202,7 +202,8 @@ class ShardedMixtureDataset(IterableDataset):
         # Initialize shard caching system
         self.curr_shard = None
         self._executor = None
-        self._cache_job: Future | None = None
+        self._cache_jobs: list[Future] = []
+        self._max_prefetch = 2  # Number of shards to prefetch in background
 
     def merge_statistics(self):
         """
@@ -361,12 +362,16 @@ class ShardedMixtureDataset(IterableDataset):
         5. Handle epoch transitions and schedule regeneration
         """
         # Start background thread pool
-        self._executor = ThreadPoolExecutor(max_workers=1)
+        self._executor = ThreadPoolExecutor(max_workers=self._max_prefetch)
 
         # Initialize worker-specific shard schedule
         self.worker_shard_sampling_schedule = self.filter_shard_sample_schedule()
         self.curr_shard_index = -1
-        self.cache_next_shard()
+
+        # Prefetch multiple shards ahead
+        for _ in range(self._max_prefetch):
+            self._submit_next_shard()
+        
         rng = np.random.default_rng(self.seed + self.epoch)
 
         # Continuous iteration with epoch management
@@ -383,8 +388,8 @@ class ShardedMixtureDataset(IterableDataset):
                 f"Rank {self.rank}, Worker {self.worker_id}: Wait for shard {shard_index} in dataset {dataset_index} in {wait_end - wait_start:.2f} seconds"
             )
 
-            # Start caching next shard immediately
-            self.cache_next_shard()
+            # Submit next shard prefetch to keep the pipeline full
+            self._submit_next_shard()
 
             # Yield shuffled timesteps from current shard
             assert self.curr_shard is not None
@@ -396,35 +401,38 @@ class ShardedMixtureDataset(IterableDataset):
             # Clean up cached shard to free memory
             self.delete_cached_shard()
 
-    def cache_next_shard(self):
+    def _submit_next_shard(self):
         """
-        Start background caching of the next shard using ThreadPoolExecutor.
+        Submit the next shard for background loading using ThreadPoolExecutor.
 
         Handles epoch transitions by regenerating the sampling schedule when
         the current schedule is exhausted.
         """
         assert self._executor is not None
-        # Check if epoch is complete and regenerate schedule if needed
-        if self.curr_shard_index + 1 >= len(self.worker_shard_sampling_schedule):
+        # Compute the index to prefetch: current + already-submitted + 1
+        next_offset = self.curr_shard_index + 1 + len(self._cache_jobs)
+        if next_offset >= len(self.worker_shard_sampling_schedule):
             self.epoch += 1
             self.shard_sampling_schedule = self.generate_shard_sampling_schedule()
             self.worker_shard_sampling_schedule = self.filter_shard_sample_schedule()
             self.curr_shard_index = -1
+            next_offset = len(self._cache_jobs)
 
-        print(f"Rank {self.rank}, Worker {self.worker_id}: Caching shard...")
-        next_dataset_idx, next_shard_idx = self.worker_shard_sampling_schedule[
-            self.curr_shard_index + 1
-        ]
+        print(
+            f"Rank {self.rank}, Worker {self.worker_id}: Caching shard "
+            f"(prefetch queue depth: {len(self._cache_jobs)})..."
+        )
+        next_dataset_idx, next_shard_idx = self.worker_shard_sampling_schedule[next_offset]
         # Submit background loading job
-        self._cache_job = self._executor.submit(
+        future = self._executor.submit(
             self.datasets[next_dataset_idx].get_shard, next_shard_idx
         )
+        self._cache_jobs.append(future)
 
     def finish_cache_shard(self):
-        """Wait for the background caching job to complete and retrieve the shard."""
-        assert self._cache_job is not None
-        self.curr_shard = self._cache_job.result()
-        self._cache_job = None
+        """Wait for the first background caching job to complete and retrieve the shard."""
+        assert len(self._cache_jobs) > 0
+        self.curr_shard = self._cache_jobs.pop(0).result()
 
     def delete_cached_shard(self):
         """Delete the current cached shard to free memory."""
@@ -444,7 +452,7 @@ class ShardedMixtureDataset(IterableDataset):
         self.shard_sampling_schedule = self.generate_shard_sampling_schedule()
         self.curr_shard_index = -1
         self.curr_shard = None
-        self._cache_job = None
+        self._cache_jobs = []
 
     def print_dataset_statistics(self):
         """Print formatted dataset statistics for debugging and monitoring."""

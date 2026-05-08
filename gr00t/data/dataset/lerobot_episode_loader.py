@@ -32,7 +32,7 @@ providing episode-level data access with support for multi-modal data including:
 Returns messages with VLAStepData as defined in types.py.
 """
 
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 import json
 import logging
 from pathlib import Path
@@ -143,6 +143,10 @@ class LeRobotEpisodeLoader:
 
         # Compute effective episode lengths accounting for action horizon
         self.episode_lengths = self.get_episode_lengths()
+
+        # Episode-level LRU cache to avoid redundant parquet reads and video decoding
+        self._episode_cache: OrderedDict[int, pd.DataFrame] = OrderedDict()
+        self._episode_cache_maxsize: int = 32
 
     def _load_metadata(self) -> None:
         """
@@ -582,6 +586,11 @@ class LeRobotEpisodeLoader:
         if idx < 0 or idx >= len(self):
             raise IndexError(f"Episode index {idx} out of bounds")
 
+        # Check episode cache first to skip redundant parquet reads and video decoding
+        if idx in self._episode_cache:
+            self._episode_cache.move_to_end(idx)
+            return self._episode_cache[idx]
+
         episode_meta = self.episodes_metadata[idx]
         episode_id = episode_meta["episode_index"]
         nominal_length = episode_meta["length"]
@@ -616,6 +625,11 @@ class LeRobotEpisodeLoader:
                 f"Mask data for {key} has length {len(mask_data[key])} but dataframe has length {len(df)}"
             )
             df[f"mask.{key}"] = [mask for mask in mask_data[key]]
+        
+        # Cache the loaded episode for future access
+        self._episode_cache[idx] = df
+        if len(self._episode_cache) > self._episode_cache_maxsize:
+            self._episode_cache.popitem(last=False)
 
         return df
 
