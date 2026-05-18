@@ -43,6 +43,10 @@ while [ "$#" -gt 0 ]; do
             BASE_MODEL_PATH="$2"
             shift 2
             ;;
+        --vision-model-path)
+            VISION_MODEL_PATH="$2"
+            shift 2
+            ;;
         --dataset-path)
             DATASET_PATH="$2"
             shift 2
@@ -108,6 +112,7 @@ fi
 LAUNCH_CMD=(
     gr00t/experiment/launch_finetune.py
     --base_model_path "$BASE_MODEL_PATH"
+    --vision-model-path "$VISION_MODEL_PATH"
     --dataset_path "$DATASET_PATH"
     --embodiment_tag "$EMBODIMENT_TAG"
     --num_gpus "$NUM_GPUS"
