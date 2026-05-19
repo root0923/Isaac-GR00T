@@ -3,5 +3,5 @@ NUM_GPUS=1 MAX_STEPS=10000 GLOBAL_BATCH_SIZE=64 SAVE_STEPS=1000 uv run bash exam
     --vision-model-path /the_shared_storage/mnt/nvme0/yzc/robots/Isaac-GR00T/Cosmos-Reason2-2B \
     --dataset-path examples/LIBERO/libero_10_no_noops_1.0.0_lerobot/ \
     --embodiment-tag LIBERO_PANDA \
-    --output-dir /tmp/libero_10 \
+    --output-dir /the_shared_storage/mnt/nvme0/yzc/robots/Isaac-GR00T/checkpoints/libero_10 \
     --state-dropout-prob 0.2
