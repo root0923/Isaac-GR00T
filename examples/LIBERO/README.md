@@ -127,7 +127,7 @@ Run client server evaluation under the project root directory in separate termin
 **Terminal 1 - Server:**
 ```bash
 uv run python gr00t/eval/run_gr00t_server.py \
-    --model-path checkpoints/GR00T-N1.7-LIBERO/libero_10 \
+    --model-path /home/jzai/weights/fine_tuned/libero_10_baseline/checkpoint-10000 \
     --embodiment-tag LIBERO_PANDA \
     --use-sim-policy-wrapper
 ```
