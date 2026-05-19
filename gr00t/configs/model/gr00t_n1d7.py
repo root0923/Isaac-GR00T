@@ -121,6 +121,16 @@ class Gr00tN1d7Config(PretrainedConfig):
     # Multi-embodiment parameters
     max_num_embodiments: int = 32
 
+    # Spatial Forcing parameters (align VLA visual embeddings with VGGT 3D features)
+    use_spatial_forcing: bool = False  # Master switch for Spatial Forcing
+    sf_vggt_path: str = ""  # Path to VGGT checkpoint (.pt file)
+    sf_vla_layers_align: int = 12  # Which VLA backbone hidden_states layer to align
+    sf_align_loss_coeff: float = 0.5  # Weight for the alignment loss
+    sf_vggt_layers_align: int = -1  # Which VGGT feature layer to align (-1 = last)
+    sf_pooling_func: str = "bilinear"  # Resampling method for VGGT features
+    sf_use_vggt_pe: bool = True  # Add positional embeddings to VGGT features before pooling
+    sf_use_vlm_norm: bool = True  # Apply LayerNorm to VLA embeddings before projecting
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         for key, value in kwargs.items():

@@ -162,3 +162,28 @@ class FinetuneConfig:
     """If True, skip loading model weights from base_model_path (architecture only).
     The processor (tokenizer/config) is still loaded from base_model_path.
     Useful for CI/testing to skip the slow checkpoint shard loading."""
+
+    # --- Spatial Forcing ---
+    use_spatial_forcing: bool = False
+    """If True, enable Spatial Forcing alignment with VGGT 3D features."""
+
+    sf_vggt_path: str = ""
+    """Path to VGGT checkpoint (.pt file). Required when use_spatial_forcing=True."""
+
+    sf_vla_layers_align: int = 12
+    """Which VLA backbone hidden_states layer to align for Spatial Forcing."""
+
+    sf_align_loss_coeff: float = 0.5
+    """Weight for the Spatial Forcing alignment loss."""
+
+    sf_vggt_layers_align: int = -1
+    """Which VGGT feature layer to align (-1 = last)."""
+
+    sf_pooling_func: str = "bilinear"
+    """Resampling method for VGGT features."""
+
+    sf_use_vggt_pe: bool = True
+    """Add positional embeddings to VGGT features before pooling."""
+
+    sf_use_vlm_norm: bool = True
+    """Apply LayerNorm to VLA embeddings before projecting."""

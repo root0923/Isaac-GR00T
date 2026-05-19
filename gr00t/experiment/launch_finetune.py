@@ -91,6 +91,16 @@ if __name__ == "__main__":
     config.model.backbone_trainable_params_fp32 = True
     config.model.use_relative_action = True
 
+    # Spatial Forcing
+    config.model.use_spatial_forcing = ft_config.use_spatial_forcing
+    config.model.sf_vggt_path = ft_config.sf_vggt_path
+    config.model.sf_vla_layers_align = ft_config.sf_vla_layers_align
+    config.model.sf_align_loss_coeff = ft_config.sf_align_loss_coeff
+    config.model.sf_vggt_layers_align = ft_config.sf_vggt_layers_align
+    config.model.sf_pooling_func = ft_config.sf_pooling_func
+    config.model.sf_use_vggt_pe = ft_config.sf_use_vggt_pe
+    config.model.sf_use_vlm_norm = ft_config.sf_use_vlm_norm
+
     config.training.experiment_name = ft_config.experiment_name
     config.training.start_from_checkpoint = ft_config.base_model_path
     config.training.optim = "adamw_torch"

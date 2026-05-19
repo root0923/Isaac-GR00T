@@ -529,6 +529,7 @@ class Gr00tN1d7(PreTrainedModel):
             load_bf16=config.load_bf16,
             tune_top_llm_layers=config.tune_top_llm_layers,
             trainable_params_fp32=config.backbone_trainable_params_fp32,
+            sf_vla_layers_align=config.sf_vla_layers_align if config.use_spatial_forcing else None,
             transformers_loading_kwargs=transformers_loading_kwargs,
         )
 
@@ -541,6 +542,31 @@ class Gr00tN1d7(PreTrainedModel):
             model_type=config.backbone_model_type,
             transformers_loading_kwargs=transformers_loading_kwargs,
         )
+
+        # Initialize Spatial Forcing module (optional)
+        self.spatial_forcing = None
+        if getattr(config, "use_spatial_forcing", False):
+            if not config.sf_vggt_path:
+                raise ValueError(
+                    "Spatial Forcing is enabled (use_spatial_forcing=True) but "
+                    "sf_vggt_path is not set. Please provide the path to the VGGT checkpoint."
+                )
+            from gr00t.model.modules.spatial_forcing import SpatialForcingModule
+
+            self.spatial_forcing = SpatialForcingModule(
+                vggt_path=config.sf_vggt_path,
+                llm_dim=config.backbone_embedding_dim,
+                vggt_dim=1024,  # VGGT default embed_dim
+                vggt_layers_align=config.sf_vggt_layers_align,
+                pooling_func=config.sf_pooling_func,
+                use_vggt_pe=config.sf_use_vggt_pe,
+                use_vlm_norm=config.sf_use_vlm_norm,
+            )
+            logger.info(
+                "Spatial Forcing enabled with align_loss_coeff=%.3f, vggt_path=%s",
+                config.sf_align_loss_coeff,
+                config.sf_vggt_path,
+            )
 
     def prepare_input(self, inputs: dict) -> Tuple[BatchFeature, BatchFeature]:
         """Prepare inputs for backbone and action head."""
@@ -588,7 +614,27 @@ class Gr00tN1d7(PreTrainedModel):
         # Prepare inputs for backbone and action head
         backbone_inputs, action_inputs = self.prepare_input(inputs)
         backbone_outputs = self.backbone(backbone_inputs)
+
+        # Spatial Forcing alignment loss (computed before action head processes features)
+        if self.spatial_forcing is not None and self.training:
+            sf_features = backbone_outputs.get(
+                "sf_backbone_features", backbone_outputs["backbone_features"]
+            )
+            align_loss = self.spatial_forcing(
+                backbone_features=sf_features,
+                image_mask=backbone_outputs["image_mask"],
+                pixel_values=backbone_outputs["pixel_values"],
+                image_grid_thw=backbone_outputs.get("image_grid_thw", None),
+            )
+        else:
+            align_loss = None
+
         action_outputs = self.action_head(backbone_outputs, action_inputs)
+
+        # Add spatial forcing loss to total loss
+        if align_loss is not None:
+            action_outputs["loss"] = action_outputs["loss"] + self.config.sf_align_loss_coeff * align_loss
+            action_outputs["align_loss"] = align_loss
 
         return action_outputs
 

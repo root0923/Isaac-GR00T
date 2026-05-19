@@ -43,6 +43,7 @@ class Qwen3Backbone(torch.nn.Module):
         load_bf16: bool = False,
         tune_top_llm_layers: int = 0,
         trainable_params_fp32: bool = False,
+        sf_vla_layers_align: int | None = None,
         transformers_loading_kwargs: dict = {},
     ):
         """
@@ -88,6 +89,7 @@ class Qwen3Backbone(torch.nn.Module):
             self.model.language_model.layers.pop(-1)
 
         self.select_layer = select_layer
+        self.sf_vla_layers_align = sf_vla_layers_align
         self.set_trainable_parameters(tune_llm, tune_visual, tune_top_llm_layers)
         if load_bf16 and trainable_params_fp32:
             # cast trainable parameters to fp32
@@ -139,15 +141,23 @@ class Qwen3Backbone(torch.nn.Module):
         self.set_frozen_modules_to_eval_mode()
         # 0. Set frozen module to eval
         keys_to_use = ["input_ids", "attention_mask", "pixel_values", "image_grid_thw"]
-        vl_input = {k: vl_input[k] for k in keys_to_use}
-        outputs = self.model(**vl_input, output_hidden_states=True)
-        outputs = outputs.hidden_states[-1]
-        image_mask = vl_input["input_ids"] == self.model.config.image_token_id
-        attention_mask = vl_input["attention_mask"] == 1
-        return BatchFeature(
-            data={
-                "backbone_features": outputs,
-                "backbone_attention_mask": attention_mask,
-                "image_mask": image_mask,
-            }
-        )  # [B, T2, hidden_size]
+        vl_input_filtered = {k: vl_input[k] for k in keys_to_use}
+        outputs = self.model(**vl_input_filtered, output_hidden_states=True)
+        all_hidden_states = outputs.hidden_states
+        backbone_features = all_hidden_states[-1]
+        image_mask = vl_input_filtered["input_ids"] == self.model.config.image_token_id
+        attention_mask = vl_input_filtered["attention_mask"] == 1
+        result = {
+            "backbone_features": backbone_features,
+            "backbone_attention_mask": attention_mask,
+            "image_mask": image_mask,
+        }
+        # Spatial Forcing: extract intermediate layer features for alignment
+        if self.sf_vla_layers_align is not None:
+            result["sf_backbone_features"] = all_hidden_states[self.sf_vla_layers_align]
+        # Forward pixel_values and image_grid_thw for Spatial Forcing image preprocessing
+        if "pixel_values" in vl_input:
+            result["pixel_values"] = vl_input["pixel_values"]
+        if "image_grid_thw" in vl_input:
+            result["image_grid_thw"] = vl_input["image_grid_thw"]
+        return BatchFeature(data=result)  # [B, T2, hidden_size]
