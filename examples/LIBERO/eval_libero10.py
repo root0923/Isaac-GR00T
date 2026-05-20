@@ -5,6 +5,8 @@
 
 Usage (run with the LIBERO venv python, server must be running):
 
+uv run python gr00t/eval/run_gr00t_server.py     --model-path /home/jzai/weights/fine_tuned/libero_10_sf/checkpoint-10000     --embodiment-tag LIBERO_PANDA     --use-sim-policy-wrapper
+
     gr00t/eval/sim/LIBERO/libero_uv/.venv/bin/python examples/LIBERO/eval_libero10.py \
         --policy-client-host 127.0.0.1 \
         --policy-client-port 5555 \

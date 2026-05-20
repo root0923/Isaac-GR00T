@@ -52,6 +52,9 @@ class FinetuneConfig:
     tune_visual: bool = False
     """If True, fine-tune the visual encoder (e.g., ViT or CNN backbone)."""
 
+    tune_top_llm_layers: int = 0
+    """Number of top LLM layers to fine-tune. Used when tune_llm=False to selectively unfreeze the last N layers."""
+
     tune_projector: bool = True
     """If True, fine-tune the multimodal projector layers that map vision/language features to a shared space."""
 
